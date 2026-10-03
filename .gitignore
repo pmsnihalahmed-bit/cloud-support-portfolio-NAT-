@@ -4,6 +4,7 @@
 # .tfstate files
 *.tfstate
 *.tfstate.*
+.terraform/
 
 # Crash logs
 crash.log
@@ -22,3 +23,8 @@ override.tf.json
 # Ignore CLI configuration files
 .terraformrc
 terraform.rc
+
+#ssh key files
+*.pem
+.ssh/
+

@@ -56,6 +56,13 @@ resource "aws_security_group" "nat_sg" {
   vpc_id = aws_vpc.main.id
 
   ingress {
+    from_port    = 22
+    to_port      = 22
+    protocol      = "tcp"
+    cidr_blocks = ["106.219.125.163/32"]
+  }
+
+  ingress {
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -86,6 +93,12 @@ data "aws_ami" "amazon_linux" {
     values = ["available"]
   }
 }
+resource "aws_key_pair" "project1-nat" {
+  key_name   = "project1-nat"
+  public_key = file("~/.ssh/project1-nat.pub")
+
+  tags = { Name = "project1-nat" }
+}
 
 resource "aws_instance" "nat_instance" {
   ami                         = data.aws_ami.amazon_linux.id
@@ -93,6 +106,8 @@ resource "aws_instance" "nat_instance" {
   subnet_id                   = aws_subnet.public.id
   source_dest_check           = false
   associate_public_ip_address = true
+  key_name                    = aws_key_pair.project1-nat.key_name
+
 
   vpc_security_group_ids = [
     aws_security_group.nat_sg.id
@@ -120,8 +135,54 @@ resource "aws_instance" "nat_instance" {
   }
 }
 resource "aws_route" "private_nat" {
-route_table_id = aws_route_table.private-rt.id
-destination_cidr_block = "0.0.0.0/0"
+  route_table_id         = aws_route_table.private-rt.id
+  destination_cidr_block = "0.0.0.0/0"
 
-network_interface_id = aws_instance.nat_instance.primary_network_interface_id
+  network_interface_id = aws_instance.nat_instance.primary_network_interface_id
 }
+resource "aws_eip" "nat_eip" {
+  domain = "vpc"
+
+  tags = { Name = "nat-eip" }
+}
+
+resource "aws_eip_association" "nat_eip" {
+  allocation_id = aws_eip.nat_eip.id
+  instance_id   = aws_instance.nat_instance.id
+}
+
+resource "aws_security_group" "pvt_sg" {
+
+name = "pvt-sg" 
+vpc_id = aws_vpc.main.id
+
+ingress { 
+to_port = 22
+from_port = 22
+protocol = "tcp"
+security_groups = [aws_security_group.nat_sg.id]
+}
+
+egress {
+to_port = 0
+from_port = 0
+protocol = "-1"
+cidr_blocks = ["0.0.0.0/0"]
+}
+
+tags = { Name = "pvt-sg"
+}
+}
+resource "aws_instance" "pvt_compute" {
+ami = data.aws_ami.amazon_linux.id
+instance_type = "t3.micro"
+subnet_id = aws_subnet.private.id
+associate_public_ip_address = false
+
+vpc_security_group_ids = [ aws_security_group.pvt_sg.id ]
+
+key_name = aws_key_pair.project1-nat.key_name
+
+tags = { Name = "private-compute" }
+}
+
